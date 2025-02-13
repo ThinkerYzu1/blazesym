@@ -1559,6 +1559,34 @@ mod tests {
         }
 
         let exe = current_exe().unwrap();
+        let output = std::process::Command::new("readelf")
+            .args([std::ffi::OsStr::new("--sections"), exe.as_os_str()])
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        write!(
+            std::io::stdout(),
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+        .unwrap();
+
+        let output = std::process::Command::new("readelf")
+            .args([
+                std::ffi::OsStr::new("--syms"),
+                std::ffi::OsStr::new("--wide"),
+                exe.as_os_str(),
+            ])
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        write!(
+            std::io::stdout(),
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+        .unwrap();
+
         test(&exe);
 
         let so = Path::new(&env!("CARGO_MANIFEST_DIR"))
