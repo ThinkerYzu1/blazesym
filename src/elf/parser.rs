@@ -1049,7 +1049,11 @@ where
             return Ok(None)
         }
 
-        Ok(Some(sym.st_value - shdr.addr() + shdr.offset()))
+        let offset = sym
+            .st_value
+            .checked_sub(shdr.addr())
+            .and_then(|addr| addr.checked_add(shdr.offset()));
+        Ok(offset)
     }
 
     fn find_addr_impl<'slf>(
