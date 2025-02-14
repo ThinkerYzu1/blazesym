@@ -58,6 +58,7 @@ use super::types::ELFCOMPRESS_ZSTD;
 use super::types::PN_XNUM;
 use super::types::PT_LOAD;
 use super::types::SHF_COMPRESSED;
+use super::types::SHN_ABS;
 use super::types::SHN_LORESERVE;
 use super::types::SHN_UNDEF;
 use super::types::SHN_XINDEX;
@@ -1031,6 +1032,10 @@ where
             return Ok(None)
         }
 
+        if sym.st_shndx == SHN_ABS {
+            return Ok(None)
+        }
+
         let shdr = shdrs
             .get(usize::from(sym.st_shndx))
             .ok_or_invalid_input(|| {
@@ -1040,7 +1045,15 @@ where
                 )
             })?;
 
-        Ok(Some(sym.st_value - shdr.addr() + shdr.offset()))
+        if shdr.type_() == SHT_NOBITS {
+            return Ok(None)
+        }
+
+        let offset = sym
+            .st_value
+            .checked_sub(shdr.addr())
+            .and_then(|addr| addr.checked_add(shdr.offset()));
+        Ok(offset)
     }
 
     fn find_addr_impl<'slf>(
@@ -1539,13 +1552,41 @@ mod tests {
             let () = parser
                 .for_each(&opts, &mut |sym| {
                     let file_offset = parser.find_file_offset(sym.addr).unwrap();
-                    assert_eq!(file_offset, sym.file_offset);
+                    assert_eq!(file_offset, sym.file_offset, "{sym:x?}");
                     ControlFlow::Continue(())
                 })
                 .unwrap();
         }
 
         let exe = current_exe().unwrap();
+        let output = std::process::Command::new("readelf")
+            .args([std::ffi::OsStr::new("--sections"), exe.as_os_str()])
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        write!(
+            std::io::stdout(),
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+        .unwrap();
+
+        let output = std::process::Command::new("readelf")
+            .args([
+                std::ffi::OsStr::new("--syms"),
+                std::ffi::OsStr::new("--wide"),
+                exe.as_os_str(),
+            ])
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        write!(
+            std::io::stdout(),
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+        .unwrap();
+
         test(&exe);
 
         let so = Path::new(&env!("CARGO_MANIFEST_DIR"))
